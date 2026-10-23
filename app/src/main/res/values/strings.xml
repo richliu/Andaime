@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Andaime</string>
+    <string name="ime_name">Andaime</string>
+    <string name="subtype_label">Andaime</string>
+    <string name="import_table">匯入 Andaime 碼表</string>
+</resources>
