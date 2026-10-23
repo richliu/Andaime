@@ -63,6 +63,9 @@ import androidx.compose.ui.unit.sp
 import android.view.KeyEvent
 import kotlin.math.roundToInt
 
+/** What the letter area types: plain English, Dayi radicals, or the 符號 layer (digits, symbols, editing keys). */
+enum class InputLayer { ENGLISH, DAYI, SYMBOLS }
+
 interface KeyboardActions {
     fun onKey(key: Char)
     fun onSpace()
@@ -80,7 +83,8 @@ interface KeyboardActions {
     fun onOpenDictionary()
     fun onSwitchIme()
     fun onVoiceInput()
-    fun onToggleSymbols()
+    /** The 英文 / 大易 / 符號 keys. */
+    fun onInputLayer(layer: InputLayer)
     /** Types [text] as is (symbol layer), bypassing Dayi composition. */
     fun onLiteral(text: String)
     /** Sends an editing key (arrows, Home, End, Delete...) to the app. */
@@ -95,7 +99,7 @@ interface KeyboardActions {
     fun onToggleSimplified()
 }
 
-private enum class Fn { BACKSPACE, TAB, CAPS, ENTER, SHIFT, SWITCH_IME, SPACE, HIDE, SYMBOLS }
+private enum class Fn { BACKSPACE, TAB, CAPS, ENTER, SHIFT, SWITCH_IME, SPACE, HIDE, ENGLISH, DAYI, SYMBOLS }
 
 /** The 104 editing block: Android key code plus a text label or an icon. */
 private enum class Edit(val keyCode: Int, val label: String?, val icon: ImageVector? = null, val description: String) {
@@ -163,6 +167,9 @@ private val symbolRows = listOf(
 )
 private const val ROW_UNITS = 15f
 private const val SIDE_KEY_UNITS = 1.5f
+/** 英文, 大易 and 符號 at the bottom left: which keyboard is showing. */
+private const val MODE_KEY_UNITS = 1.25f
+private val modeKeys = listOf(Fn.ENGLISH, Fn.DAYI, Fn.SYMBOLS).map { FnKey(it, MODE_KEY_UNITS) }
 
 /** Width of the wider half across [rows], which sets the key unit in split mode. */
 private fun halfUnits(rows: List<KeyRow>) =
@@ -487,10 +494,9 @@ private fun KeyGrid(
         }
         Row {
             Keys(
-                listOf(
-                    FnKey(Fn.SYMBOLS, SIDE_KEY_UNITS),
+                modeKeys + listOf(
                     FnKey(Fn.SWITCH_IME, SIDE_KEY_UNITS),
-                    FnKey(Fn.SPACE, ROW_UNITS - 3 * SIDE_KEY_UNITS),
+                    FnKey(Fn.SPACE, ROW_UNITS - 3 * MODE_KEY_UNITS - 2 * SIDE_KEY_UNITS),
                     FnKey(Fn.HIDE, SIDE_KEY_UNITS),
                 ),
                 unit,
@@ -502,10 +508,9 @@ private fun KeyGrid(
         val half = (width - splitGap) / 2
         val unit = half / halfUnits
         val bottom = KeyRow(
-            listOf(
-                FnKey(Fn.SYMBOLS, SIDE_KEY_UNITS),
+            modeKeys + listOf(
                 FnKey(Fn.SWITCH_IME, SIDE_KEY_UNITS),
-                FnKey(Fn.SPACE, halfUnits - 2 * SIDE_KEY_UNITS),
+                FnKey(Fn.SPACE, halfUnits - 3 * MODE_KEY_UNITS - SIDE_KEY_UNITS),
             ),
             listOf(FnKey(Fn.SPACE, halfUnits - SIDE_KEY_UNITS), FnKey(Fn.HIDE, SIDE_KEY_UNITS)),
         )
@@ -554,7 +559,9 @@ private fun KeyView(
                     actions::onSpace,
                 )
                 Fn.HIDE -> FnLabel(if (state.expanded) "收合" else "收起", null, false, actions::onHide)
-                Fn.SYMBOLS -> FnLabel(if (state.symbols) "ABC" else "?123", null, false, actions::onToggleSymbols)
+                Fn.ENGLISH -> FnLabel("英文", null, state.english && !state.symbols) { actions.onInputLayer(InputLayer.ENGLISH) }
+                Fn.DAYI -> FnLabel("大易", null, !state.english && !state.symbols) { actions.onInputLayer(InputLayer.DAYI) }
+                Fn.SYMBOLS -> FnLabel("符號", null, state.symbols) { actions.onInputLayer(InputLayer.SYMBOLS) }
             }
             KeyCap(width, height, label, hint, function = true, active = active, onClick = onClick)
         }

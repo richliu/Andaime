@@ -41,8 +41,8 @@ import org.techarea.andaime.ime.TableRepository
 /** Where PIME keeps its .cin tables; users download from here until Andaime has its own page. */
 const val PIME_TABLES_URL = "https://github.com/EasyIME/PIME/tree/master/python/cinbase/cin"
 
-/** Andaime's own table page, once the public repo exists. Null hides the link's target and shows it as coming soon. */
-val ANDAIME_TABLES_URL: String? = null
+/** The author's PIME fork, which keeps the 個人化 Dayi tables. Null shows the button as coming soon. */
+val ANDAIME_TABLES_URL: String? = "https://github.com/richliu/PIME/tree/master/python/cinbase/cin"
 
 @Composable
 fun TablesTab(tables: List<InstalledTable>, onImport: (Uri) -> Unit, onChanged: () -> Unit) {

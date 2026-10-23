@@ -10,6 +10,7 @@ import android.graphics.drawable.ColorDrawable
 import android.inputmethodservice.InputMethodService
 import android.os.Build
 import android.util.Log
+import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
@@ -136,9 +137,20 @@ class AndaimeImeService : InputMethodService(), LifecycleOwner, SavedStateRegist
         return true
     }
 
-    /** The default refuses implicit show requests (tapping a field) when a hardware keyboard is present. */
-    override fun onShowInputRequested(flags: Int, configChange: Boolean): Boolean =
-        if (ui.hardwareKeyboard) true else super.onShowInputRequested(flags, configChange)
+    /**
+     * The default refuses implicit show requests (tapping a field) when a hardware keyboard is present.
+     * Only text fields get the toolbar forced on: browsers attach the keyboard to the page itself
+     * (TYPE_NULL) while focus moves, and showing it there makes dialogs above jump as the keyboard
+     * comes and goes.
+     */
+    override fun onShowInputRequested(flags: Int, configChange: Boolean): Boolean {
+        val show = if (ui.hardwareKeyboard && editorAcceptsText) true else super.onShowInputRequested(flags, configChange)
+        if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, "showRequested flags=$flags text=$editorAcceptsText -> $show")
+        return show
+    }
+
+    /** False while attached to something that isn't a text field, e.g. a web page between inputs. */
+    private var editorAcceptsText = false
 
     /** What [engine] was built from; a different value (import, delete, decoding switch) means rebuild. */
     private var loadedTable: InstalledTable? = null
@@ -197,8 +209,19 @@ class AndaimeImeService : InputMethodService(), LifecycleOwner, SavedStateRegist
     /** Runs for every field, with or without the soft keyboard (hardware keyboards too). */
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
+        // `adb shell setprop log.tag.Andaime DEBUG`: which fields the keyboard attaches to, e.g. to chase a field that keeps restarting
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(
+                TAG,
+                "startInput pkg=${attribute?.packageName} id=${attribute?.fieldId} " +
+                    "type=0x${Integer.toHexString(attribute?.inputType ?: 0)} restarting=$restarting english=${ui.english}",
+            )
+        }
         if (restarting) return
         resetComposition()
+        editorAcceptsText = ((attribute?.inputType ?: 0) and InputType.TYPE_MASK_CLASS) != InputType.TYPE_NULL
+        // Not a text field: keep 中/英 and the layer for the next real field instead of flipping them
+        if (!editorAcceptsText) return
         fieldForcesEnglish = prefersEnglish(attribute?.inputType ?: 0)
         ui.english = fieldForcesEnglish || userEnglish
         ui.shift = false
@@ -213,6 +236,16 @@ class AndaimeImeService : InputMethodService(), LifecycleOwner, SavedStateRegist
         loadTable()
         expandWindowToFullHeight()
         moveLifecycle(Lifecycle.Event.ON_RESUME)
+    }
+
+    override fun onWindowShown() {
+        super.onWindowShown()
+        if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, "windowShown")
+    }
+
+    override fun onWindowHidden() {
+        super.onWindowHidden()
+        if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, "windowHidden")
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
@@ -419,10 +452,15 @@ class AndaimeImeService : InputMethodService(), LifecycleOwner, SavedStateRegist
             }
         }
 
-        override fun onToggleSymbols() {
+        override fun onInputLayer(layer: InputLayer) {
             resetComposition()
             ui.shift = false
-            ui.symbols = !ui.symbols
+            ui.emoji = false
+            ui.symbols = layer == InputLayer.SYMBOLS
+            if (layer == InputLayer.SYMBOLS) return
+            ui.english = layer == InputLayer.ENGLISH
+            // An explicit choice in an English-only field (URL, password...) stays with that field
+            if (!fieldForcesEnglish) userEnglish = ui.english
         }
 
         override fun onLiteral(text: String) {
